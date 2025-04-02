@@ -1,0 +1,114 @@
+---
+# Ansible playbook to set up a webserver
+# This playbook is distribution-agnostic and will work on both Debian/Ubuntu and RHEL/CentOS/Amazon Linux
+
+- name: Set up webserver
+  hosts: localhost  # Changed from 'all' to 'localhost' for local execution
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    apache_packages:
+      Debian: apache2
+      RedHat: httpd
+    apache_service:
+      Debian: apache2
+      RedHat: httpd
+    apache_user:
+      Debian: www-data
+      RedHat: apache
+    document_root:
+      Debian: /var/www/html
+      RedHat: /var/www/html
+  
+  tasks:
+    - name: Ensure templates directory exists
+      file:
+        path: "{{ playbook_dir }}/templates"
+        state: directory
+        mode: '0755'
+      
+    - name: Update package cache (Debian/Ubuntu)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+      ignore_errors: yes
+    
+    - name: Update package cache (RedHat/CentOS/Amazon)
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      ignore_errors: yes
+    
+    - name: Install Apache web server
+      package:
+        name: "{{ apache_packages[ansible_os_family] }}"
+        state: present
+    
+    - name: Start and enable Apache service
+      service:
+        name: "{{ apache_service[ansible_os_family] }}"
+        state: started
+        enabled: yes
+      ignore_errors: yes
+    
+    - name: Get hostname
+      command: hostname
+      register: hostname_result
+      changed_when: false
+    
+    - name: Set private IP fact
+      set_fact:
+        private_ip: "127.0.0.1"
+      when: ansible_default_ipv4 is not defined or ansible_default_ipv4.address is not defined
+    
+    - name: Get private IP from facts
+      set_fact:
+        private_ip: "{{ ansible_default_ipv4.address }}"
+      when: ansible_default_ipv4 is defined and ansible_default_ipv4.address is defined
+    
+    - name: Try to get AWS public IP
+      uri:
+        url: http://169.254.169.254/latest/meta-data/public-ipv4
+        timeout: 2
+      register: aws_public_ip
+      failed_when: false
+      ignore_errors: yes
+      changed_when: false
+    
+    - name: Try to get Azure public IP
+      uri:
+        url: http://169.254.169.254/metadata/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress
+        headers:
+          Metadata: "true"
+        timeout: 2
+      register: azure_public_ip
+      failed_when: false
+      ignore_errors: yes
+      changed_when: false
+    
+    - name: Set public IP
+      set_fact:
+        public_ip: "{{ aws_public_ip.content | default(azure_public_ip.content | default(private_ip)) }}"
+    
+    - name: Ensure document root exists
+      file:
+        path: "{{ document_root[ansible_os_family] }}"
+        state: directory
+        owner: "{{ apache_user[ansible_os_family] }}"
+        group: "{{ apache_user[ansible_os_family] }}"
+        mode: '0755'
+    
+    - name: Create index.html from template
+      template:
+        src: "{{ playbook_dir }}/templates/index.html.j2"
+        dest: "{{ document_root[ansible_os_family] }}/index.html"
+        owner: "{{ apache_user[ansible_os_family] }}"
+        group: "{{ apache_user[ansible_os_family] }}"
+        mode: '0644'
+      
+    - name: Restart Apache service
+      service:
+        name: "{{ apache_service[ansible_os_family] }}"
+        state: restarted
+      ignore_errors: yes

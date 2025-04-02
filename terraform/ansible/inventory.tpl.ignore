@@ -1,0 +1,9 @@
+[aws_webserver]
+${aws_ip} ansible_user=ec2-user
+
+[azure_webserver]
+${azure_ip} ansible_user=adminuser
+
+[webservers:children]
+aws_webserver
+azure_webserver

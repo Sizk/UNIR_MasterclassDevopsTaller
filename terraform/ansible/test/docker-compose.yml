@@ -1,0 +1,50 @@
+services:
+  aws-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: aws
+    container_name: aws-webserver-test
+    volumes:
+      - ../webserver_setup.yml:/ansible/webserver_setup.yml
+      - ../ansible.cfg:/ansible/ansible.cfg
+      - ../templates:/ansible/templates
+    ports:
+      - "8080:80"
+    privileged: true
+    command: >
+      bash -c "echo 'localhost ansible_connection=local' > /ansible/inventory &&
+               sed -i 's/<\\/div>/    <p><span class=\"label\">Platform:<\\/span> AWS (Docker Test)<\\/p>\\n        <\\/div>/g' /ansible/templates/index.html.j2 &&
+               echo '<html><body><h1>Default Apache Page</h1></body></html>' > /var/www/html/index.html &&
+               chmod 644 /var/www/html/index.html &&
+               chown apache:apache /var/www/html/index.html &&
+               /usr/sbin/httpd &&
+               ANSIBLE_CONFIG=/ansible/ansible.cfg ansible-playbook webserver_setup.yml &&
+               echo 'Playbook executed successfully' &&
+               cat /var/www/html/index.html &&
+               tail -f /dev/null"
+
+  azure-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: azure
+    container_name: azure-webserver-test
+    volumes:
+      - ../webserver_setup.yml:/ansible/webserver_setup.yml
+      - ../ansible.cfg:/ansible/ansible.cfg
+      - ../templates:/ansible/templates
+    ports:
+      - "8081:80"
+    privileged: true
+    command: >
+      bash -c "echo 'localhost ansible_connection=local' > /ansible/inventory &&
+               sed -i 's/<\\/div>/    <p><span class=\"label\">Platform:<\\/span> Azure (Docker Test)<\\/p>\\n        <\\/div>/g' /ansible/templates/index.html.j2 &&
+               echo '<html><body><h1>Default Apache Page</h1></body></html>' > /var/www/html/index.html &&
+               chmod 644 /var/www/html/index.html &&
+               chown www-data:www-data /var/www/html/index.html &&
+               service apache2 start &&
+               ANSIBLE_CONFIG=/ansible/ansible.cfg ansible-playbook webserver_setup.yml &&
+               echo 'Playbook executed successfully' &&
+               cat /var/www/html/index.html &&
+               tail -f /dev/null"
